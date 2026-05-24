@@ -12,6 +12,7 @@ struct SidebarView: View {
     let onNewTerminal: () -> Void
     let onNewNote: () -> Void
     let onRestart: (UUID) -> Void
+    let onStop: (UUID) -> Void
     let onCloseSession: (UUID) -> Void
     let onDeleteNote: (UUID) -> Void
     let onRenameSession: (UUID, String) -> Void
@@ -58,6 +59,7 @@ struct SidebarView: View {
                             icon: icon(for: s),
                             onSelect: { onSelect(.session(s.id)) },
                             onRestart: { onRestart(s.id) },
+                            onStop: { onStop(s.id) },
                             onClose: { onCloseSession(s.id) },
                             onRename: { onRenameSession(s.id, $0) }
                         )

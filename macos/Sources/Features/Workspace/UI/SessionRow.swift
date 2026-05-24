@@ -9,6 +9,7 @@ struct SessionRow: View {
     let icon: String
     let onSelect: () -> Void
     let onRestart: () -> Void
+    let onStop: () -> Void
     let onClose: () -> Void
     let onRename: (String) -> Void
 
@@ -50,7 +51,11 @@ struct SessionRow: View {
         .onTapGesture { onSelect() }
         .contextMenu {
             Button("Rename") { beginRename() }
-            Button("Restart") { onRestart() }
+            if session.status == .running || session.status == .starting {
+                Button("Stop") { onStop() }
+            } else {
+                Button("Restart") { onRestart() }
+            }
             Divider()
             Button("Close", role: .destructive) { onClose() }
         }

@@ -21,10 +21,17 @@ struct WorkspaceMainView: View {
                     WorkspaceEmptyView(title: "Note not found", systemImage: "doc")
                 }
 
-            case .session:
-                // Reuse Ghostty's terminal view verbatim. The controller is the
-                // TerminalViewModel (surfaceTree) and the delegate.
-                TerminalView(ghostty: ghostty, viewModel: controller, delegate: controller)
+            case .session(let id):
+                if controller.hasRuntime(id) {
+                    // Reuse Ghostty's terminal view verbatim. The controller is
+                    // the TerminalViewModel (surfaceTree) and the delegate.
+                    TerminalView(ghostty: ghostty, viewModel: controller, delegate: controller)
+                } else {
+                    // Session was stopped by the user; offer to restart it.
+                    StoppedSessionView(
+                        title: model.session(id: id)?.title ?? "Session",
+                        onRestart: { controller.restartSession(id) })
+                }
 
             case nil:
                 WorkspaceEmptyView(
@@ -33,6 +40,28 @@ struct WorkspaceMainView: View {
                     detail: "Create a terminal or launch an agent from the sidebar.")
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Shown in the main pane when the active session has been stopped. Calm and
+/// minimal, with a single Restart affordance.
+struct StoppedSessionView: View {
+    let title: String
+    let onRestart: () -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "stop.circle")
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(.tertiary)
+            Text("\(title) is stopped")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+            Button("Restart", action: onRestart)
+                .controlSize(.regular)
+        }
+        .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

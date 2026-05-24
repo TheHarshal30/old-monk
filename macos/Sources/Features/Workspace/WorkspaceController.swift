@@ -107,6 +107,7 @@ class WorkspaceController: BaseTerminalController {
             onNewTerminal: { [weak self] in _ = self?.newTerminalSession() },
             onNewNote: { [weak self] in self?.presentNewNotePrompt() },
             onRestart: { [weak self] id in self?.restartSession(id) },
+            onStop: { [weak self] id in self?.stopSession(id) },
             onCloseSession: { [weak self] id in self?.closeSession(id) },
             onDeleteNote: { [weak self] id in self?.model.removeNote(id: id) },
             onRenameSession: { [weak self] id, title in self?.model.renameSession(id: id, to: title) }
@@ -188,6 +189,23 @@ class WorkspaceController: BaseTerminalController {
         }
     }
 
+    /// Stop a session's process(es) but keep it in the sidebar as stopped
+    /// (restartable). Frees the PTY so it no longer runs in the background.
+    /// Unlike `closeSession`, the session is not removed.
+    func stopSession(_ id: UUID) {
+        guard runtimes[id] != nil else { return } // already stopped
+        // Dropping the runtime deinits the surfaces and tears down their PTYs.
+        runtimes[id] = nil
+        model.updateStatus(id: id, .exited)
+
+        if case .session(let active)? = model.activeItem, active == id {
+            isSwitching = true
+            surfaceTree = .init()
+            focusedSurface = nil
+            isSwitching = false
+        }
+    }
+
     /// Close a session entirely (all its splits) and remove it from the sidebar.
     func closeSession(_ id: UUID, confirm: Bool = true, alreadyEmptyTree: Bool = false) {
         // Confirm if a child process is still alive.
@@ -236,15 +254,23 @@ class WorkspaceController: BaseTerminalController {
 
         switch item {
         case .session(let id):
-            guard let rt = runtimes[id] else { return }
-            let old = focusedSurface
-            isSwitching = true
-            surfaceTree = rt.tree
-            let target = rt.primarySurface
-            focusedSurface = target
-            isSwitching = false
-            if let target {
-                DispatchQueue.main.async { Ghostty.moveFocus(to: target, from: old) }
+            if let rt = runtimes[id] {
+                let old = focusedSurface
+                isSwitching = true
+                surfaceTree = rt.tree
+                let target = rt.primarySurface
+                focusedSurface = target
+                isSwitching = false
+                if let target {
+                    DispatchQueue.main.async { Ghostty.moveFocus(to: target, from: old) }
+                }
+            } else {
+                // Stopped session: no live surfaces. Clear the rendered tree;
+                // the main pane shows a stopped placeholder (with Restart).
+                isSwitching = true
+                surfaceTree = .init()
+                focusedSurface = nil
+                isSwitching = false
             }
 
         case .note:
@@ -374,9 +400,18 @@ class WorkspaceController: BaseTerminalController {
 
     private func isValid(_ item: WorkspaceItem) -> Bool {
         switch item {
-        case .session(let id): return runtimes[id] != nil
+        // A session is valid (selectable) as long as it exists in the model,
+        // even if stopped (no live runtime) — selecting it shows a stopped
+        // placeholder that can restart it.
+        case .session(let id): return model.session(id: id) != nil
         case .note(let id): return model.note(id: id) != nil
         }
+    }
+
+    /// Whether a session currently has a live runtime (surfaces/PTY). False for
+    /// user-stopped sessions; the main pane shows a stopped placeholder for those.
+    func hasRuntime(_ id: UUID) -> Bool {
+        runtimes[id] != nil
     }
 }
 #endif
